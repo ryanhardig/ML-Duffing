@@ -97,7 +97,8 @@ def compute_poincare_for_gamma(params: Dict, t_transient_cycles: int = 50,
 
 def bifurcation_from_csv(csv_path: str, out_prefix: str = 'bifurcation_base_',
                          base_ids: List[int] = None, t_transient_cycles: int = 50,
-                         n_samples: int = 200, show: bool = False):
+                         n_samples: int = 200, show: bool = False,
+                         mode: str = 'points'):
     df = pd.read_csv(csv_path)
     if 'base_id' not in df.columns:
         # try to infer grouping by non-gamma params
@@ -116,6 +117,8 @@ def bifurcation_from_csv(csv_path: str, out_prefix: str = 'bifurcation_base_',
         gammas = rows['gamma'].values.astype(float)
         all_x = []
         all_g = []
+        # For 'lines' mode we'll collect a matrix of samples (num_gammas x n_samples)
+        samples_matrix = []
         print(f'Processing base_id={bid} with {len(gammas)} gamma values...')
         # pick base params from first row (delta,alpha,beta,omega fixed across group)
         base_params = rows.iloc[0][['delta','alpha','beta','omega']].to_dict()
@@ -126,12 +129,31 @@ def bifurcation_from_csv(csv_path: str, out_prefix: str = 'bifurcation_base_',
             # store each sample as a point at this gamma
             all_x.extend(samples.tolist())
             all_g.extend([g] * len(samples))
+            # keep a fixed-length vector per gamma for line plotting (pad with nan if needed)
+            if mode == 'lines':
+                arr = np.array(samples, dtype=float)
+                if len(arr) < n_samples:
+                    pad = np.full((n_samples - len(arr),), np.nan)
+                    arr = np.concatenate([arr, pad])
+                else:
+                    arr = arr[:n_samples]
+                samples_matrix.append(arr)
 
         results[bid] = {'gamma': np.array(all_g), 'x': np.array(all_x)}
 
         # plot
         fig, ax = plt.subplots(figsize=(8, 5))
-        ax.plot(results[bid]['gamma'], results[bid]['x'], ',k', alpha=0.6)
+        if mode == 'points':
+            ax.plot(results[bid]['gamma'], results[bid]['x'], ',k', alpha=0.6)
+        elif mode == 'lines':
+            # samples_matrix shape: (num_gammas, n_samples)
+            samp_mat = np.array(samples_matrix, dtype=float)
+            # For each sample index (column) plot a continuous line across gamma values
+            for j in range(samp_mat.shape[1]):
+                ax.plot(gammas, samp_mat[:, j], '-', lw=0.8, alpha=0.8)
+        else:
+            raise ValueError("mode must be 'points' or 'lines'")
+
         ax.set_xlabel('gamma')
         ax.set_ylabel('Poincaré x')
         ax.set_title(f'Bifurcation diagram (base_id={bid})')

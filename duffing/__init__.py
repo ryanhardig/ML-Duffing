@@ -1,0 +1,1 @@
+"""duffing package initializer (empty)"""
